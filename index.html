@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DKC 제안서 자동완성</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.umd.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#1e3a5f;--blue:#2563eb;--blue-light:#eff6ff;--blue-mid:#bfdbfe;
+  --bg:#f1f5f9;--surface:#fff;--border:#e2e8f0;--text:#1e293b;--muted:#64748b;
+  --red:#dc2626;--green:#059669;--purple:#7c3aed;--cyan:#0284c7;
+  --orange:#d97706;--pink:#db2777;--slate:#64748b;
+  --radius:10px;--shadow:0 2px 8px rgba(0,0,0,.08);
+}
+html,body{height:100%;font-family:'Pretendard','Apple SD Gothic Neo',system-ui,sans-serif;font-size:14px;color:var(--text);background:var(--bg)}
+
+/* ── Layout ── */
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--navy);color:#fff;padding:0 24px;height:56px;flex-shrink:0;
+  box-shadow:0 2px 8px rgba(0,0,0,.2);
+}
+.logo{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;letter-spacing:-.3px}
+.logo span{font-size:20px}
+.main-layout{display:flex;flex:1;overflow:hidden}
+
+/* ── Left Panel ── */
+.left-panel{
+  width:310px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);
+  overflow-y:auto;padding:20px 16px;display:flex;flex-direction:column;gap:18px;
+}
+.panel-section{display:flex;flex-direction:column;gap:8px}
+.panel-label{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+
+/* ── Drop zones ── */
+.dropzone{
+  border:2px dashed var(--border);border-radius:var(--radius);padding:16px 12px;
+  text-align:center;cursor:pointer;transition:all .15s;color:var(--muted);font-size:13px;
+  position:relative;
+}
+.dropzone:hover,.dropzone.drag-over{border-color:var(--blue);background:var(--blue-light);color:var(--blue)}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dropzone .dz-icon{font-size:22px;display:block;margin-bottom:4px}
+.dropzone.has-file{border-color:var(--green);background:#f0fdf4;border-style:solid}
+.dropzone.has-file .dz-text{color:#166534;font-weight:600}
+
+/* ── File list ── */
+.file-list{display:flex;flex-direction:column;gap:4px}
+.file-item{
+  display:flex;align-items:center;gap:6px;padding:5px 8px;
+  background:#f8fafc;border:1px solid var(--border);border-radius:6px;font-size:12px;
+}
+.file-item .fi-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.file-item .fi-del{color:var(--red);cursor:pointer;font-size:15px;line-height:1;flex-shrink:0;padding:0 2px}
+.file-item .fi-del:hover{opacity:.7}
+
+/* ── Form controls ── */
+input[type=text],input[type=password],select{
+  width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+  font-size:13px;color:var(--text);background:#fff;outline:none;transition:border .15s;
+}
+input[type=text]:focus,input[type=password]:focus,select:focus{border-color:var(--blue)}
+
+.radio-group{display:flex;gap:10px}
+.radio-group label{display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer}
+.radio-group input{accent-color:var(--blue);width:14px;height:14px}
+
+/* ── Preset buttons ── */
+.preset-grid{display:flex;flex-direction:column;gap:6px}
+.preset-btn{
+  display:flex;align-items:center;gap:8px;padding:9px 12px;
+  border:1px solid var(--border);border-radius:8px;background:#f8fafc;
+  cursor:pointer;font-size:13px;text-align:left;transition:all .15s;color:var(--text);
+  font-family:inherit;
+}
+.preset-btn:hover{border-color:var(--blue);background:var(--blue-light);color:var(--blue)}
+.preset-btn .pb-icon{font-size:18px}
+.preset-btn .pb-info{display:flex;flex-direction:column;gap:1px}
+.preset-btn .pb-name{font-weight:600;font-size:13px}
+.preset-btn .pb-desc{font-size:11px;color:var(--muted)}
+.preset-btn:hover .pb-desc{color:var(--blue)}
+
+/* ── Action button ── */
+.btn-primary{
+  width:100%;padding:12px;background:var(--blue);color:#fff;border:none;border-radius:8px;
+  font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;gap:8px;transition:background .15s;font-family:inherit;
+}
+.btn-primary:hover:not(:disabled){background:#1d4ed8}
+.btn-primary:disabled{background:#94a3b8;cursor:not-allowed}
+.btn-primary.loading{background:#1d4ed8}
+
+.btn-sm{
+  padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:#fff;
+  font-size:12px;cursor:pointer;color:var(--text);transition:all .15s;font-family:inherit;
+  display:inline-flex;align-items:center;gap:4px;
+}
+.btn-sm:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-light)}
+.btn-sm.danger:hover{border-color:var(--red);color:var(--red);background:#fef2f2}
+
+/* ── Right Panel ── */
+.right-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+
+.toolbar{
+  display:flex;align-items:center;gap:8px;padding:12px 20px;
+  background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;
+}
+.toolbar-btn{
+  display:inline-flex;align-items:center;gap:5px;padding:7px 14px;
+  border:1px solid var(--border);border-radius:7px;background:#fff;
+  font-size:13px;cursor:pointer;color:var(--text);transition:all .15s;font-family:inherit;font-weight:500;
+}
+.toolbar-btn:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-light)}
+.toolbar-btn:disabled{opacity:.4;cursor:not-allowed}
+.progress-badge{
+  margin-left:auto;background:var(--blue-light);color:var(--blue);
+  padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;
+}
+
+.cards-area{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+
+/* ── Empty state ── */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;gap:12px;color:var(--muted);
+}
+.empty-state .es-icon{font-size:48px}
+.empty-state .es-text{font-size:15px;font-weight:500}
+.empty-state .es-sub{font-size:13px}
+
+/* ── Cards ── */
+.card{
+  background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);
+  box-shadow:var(--shadow);overflow:hidden;transition:box-shadow .15s;
+}
+.card:hover{box-shadow:0 4px 16px rgba(0,0,0,.1)}
+.card-header{
+  display:flex;align-items:center;gap:10px;padding:12px 16px;
+  border-bottom:1px solid var(--border);background:#fafafa;cursor:grab;
+}
+.card-header:active{cursor:grabbing}
+.drag-handle{color:#cbd5e1;font-size:16px;flex-shrink:0}
+.card-color-bar{width:4px;height:20px;border-radius:3px;flex-shrink:0}
+.card-title{font-weight:700;font-size:14px;flex:1}
+.card-actions{display:flex;gap:4px;margin-left:auto}
+.card-act-btn{
+  border:none;background:none;cursor:pointer;padding:4px 6px;border-radius:5px;
+  font-size:15px;color:var(--muted);transition:all .12s;
+}
+.card-act-btn:hover{background:var(--border);color:var(--text)}
+.card-act-btn.copied{color:var(--green)!important}
+
+.card-body{padding:14px 16px;position:relative}
+.card-content{
+  min-height:60px;white-space:pre-wrap;font-size:13px;line-height:1.7;
+  color:var(--text);outline:none;
+}
+.card-content[contenteditable=true]{
+  border:1px solid transparent;border-radius:6px;padding:4px 6px;
+  margin:-4px -6px;transition:border .15s;
+}
+.card-content[contenteditable=true]:focus{border-color:var(--blue);background:#f8faff}
+.card-content .need-input{color:#dc2626;background:#fef2f2;padding:1px 4px;border-radius:3px}
+
+/* ── Skeleton ── */
+.skeleton{background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);background-size:200% 100%;animation:shimmer 1.4s infinite}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.sk-line{height:13px;border-radius:4px;margin-bottom:8px}
+.sk-line:last-child{margin-bottom:0;width:65%}
+
+/* ── Status bar ── */
+.status-bar{
+  font-size:12px;padding:6px 16px;background:#f0fdf4;color:#166534;
+  border-top:1px solid #bbf7d0;display:flex;align-items:center;gap:6px;
+}
+.status-bar.error{background:#fef2f2;color:var(--red);border-top-color:#fecaca}
+.status-bar.hidden{display:none}
+.spinner{width:12px;height:12px;border:2px solid #bbf7d0;border-top-color:#166534;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Modal ── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;
+  align-items:center;justify-content:center;z-index:1000;
+}
+.modal-overlay.hidden{display:none}
+.modal-box{
+  background:#fff;border-radius:14px;padding:28px;width:420px;
+  box-shadow:0 20px 60px rgba(0,0,0,.2);
+}
+.modal-box h2{font-size:17px;font-weight:700;margin-bottom:6px;color:var(--navy)}
+.modal-box p{font-size:13px;color:var(--muted);margin-bottom:16px}
+.modal-box .btn-row{display:flex;gap:8px;margin-top:14px}
+.btn-modal-primary{flex:1;padding:10px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-modal-primary:hover{background:#1d4ed8}
+.btn-modal-cancel{padding:10px 16px;background:#f1f5f9;color:var(--text);border:none;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit}
+.btn-modal-cancel:hover{background:var(--border)}
+.api-note{font-size:11px;color:var(--muted);margin-top:8px}
+
+/* ── API Key badge ── */
+.api-badge{
+  display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 12px;
+  background:rgba(255,255,255,.12);border-radius:20px;cursor:pointer;border:1px solid rgba(255,255,255,.2);
+  color:#fff;transition:background .15s;
+}
+.api-badge:hover{background:rgba(255,255,255,.2)}
+.api-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;flex-shrink:0}
+.api-dot.off{background:#f87171}
+
+/* ── Section tag ── */
+.section-tag{
+  display:inline-block;font-size:10px;font-weight:700;letter-spacing:.5px;
+  padding:2px 7px;border-radius:20px;margin-left:6px;opacity:.8;
+}
+
+/* ── Sortable ghost ── */
+.card-ghost { opacity: 0.45; background: var(--blue-light) !important; border: 2px dashed var(--blue) !important; }
+.card-chosen { box-shadow: 0 8px 24px rgba(37,99,235,.2) !important; }
+
+/* ── Print ── */
+@media print{
+  .left-panel,.toolbar,.card-actions,.drag-handle,.status-bar,header{display:none!important}
+  .main-layout{display:block}
+  .right-panel{overflow:visible}
+  .cards-area{overflow:visible;padding:0}
+  .card{break-inside:avoid;margin-bottom:20px;box-shadow:none;border:1px solid #ccc}
+}
+</style>
+</head>
+<body>
+
+<!-- API Key Modal -->
+<div class="modal-overlay" id="apiModal">
+  <div class="modal-box">
+    <h2>🔑 OpenAI API 키 설정</h2>
+    <p>GPT-4o를 사용합니다. API 키는 브라우저 로컬스토리지에만 저장됩니다.</p>
+    <input type="password" id="apiKeyInput" placeholder="sk-..." autocomplete="off">
+    <p class="api-note">⚠️ API 비용은 사용자 계정에 청구됩니다. 키를 타인과 공유하지 마세요.</p>
+    <div class="btn-row">
+      <button class="btn-modal-cancel" id="apiModalCancel">취소</button>
+      <button class="btn-modal-primary" onclick="saveApiKey()">저장 후 시작</button>
+    </div>
+  </div>
+</div>
+
+<!-- App -->
+<div class="app" id="app">
+  <header>
+    <div class="logo"><span>📋</span>DKC 제안서 자동완성</div>
+    <div class="api-badge" id="apiBadge" onclick="showApiKeyModal()">
+      <div class="api-dot off" id="apiDot"></div>
+      <span id="apiStatus">API 키 설정 필요</span>
+    </div>
+  </header>
+
+  <div class="main-layout">
+    <!-- ── Left Panel ── -->
+    <aside class="left-panel">
+
+      <!-- Form PDF -->
+      <div class="panel-section">
+        <div class="panel-label">📄 제안서 양식 PDF</div>
+        <div class="dropzone" id="formDropzone">
+          <input type="file" id="formFileInput" accept=".pdf">
+          <span class="dz-icon">📁</span>
+          <span class="dz-text">클릭 또는 드래그</span>
+          <div style="font-size:11px;margin-top:2px;color:#94a3b8">없으면 프리셋 사용</div>
+        </div>
+        <div id="formFileName" style="display:none" class="file-item">
+          <span>📄</span>
+          <span class="fi-name" id="formFileNameText"></span>
+          <span class="fi-del" onclick="clearFormFile()">✕</span>
+        </div>
+      </div>
+
+      <!-- Ref PDFs -->
+      <div class="panel-section">
+        <div class="panel-label">📚 참고 자료 PDF <span style="font-weight:400;font-size:10px">(복수 가능)</span></div>
+        <div class="dropzone" id="refDropzone">
+          <input type="file" id="refFileInput" accept=".pdf" multiple>
+          <span class="dz-icon">📂</span>
+          <span class="dz-text">이전 제안서, 타당성조사, 시장자료</span>
+        </div>
+        <div class="file-list" id="refFileList"></div>
+      </div>
+
+      <!-- Project info -->
+      <div class="panel-section">
+        <div class="panel-label">🏗️ 프로젝트 정보</div>
+        <input type="text" id="projectName" placeholder="프로젝트명 입력">
+        <div class="radio-group" style="margin-top:4px">
+          <label><input type="radio" name="field" value="재생에너지" checked> 재생에너지</label>
+          <label><input type="radio" name="field" value="인프라"> 인프라</label>
+          <label><input type="radio" name="field" value="기타"> 기타</label>
+        </div>
+      </div>
+
+      <!-- Presets -->
+      <div class="panel-section">
+        <div class="panel-label">⚡ 프리셋으로 빠른 시작</div>
+        <div class="preset-grid">
+          <button class="preset-btn" onclick="applyPreset('renewable')">
+            <span class="pb-icon">☀️</span>
+            <div class="pb-info">
+              <span class="pb-name">재생에너지 제안서</span>
+              <span class="pb-desc">사업개요 · 시장분석 · 기술사양 · 재무계획 · 리스크 · 팀소개</span>
+            </div>
+          </button>
+          <button class="preset-btn" onclick="applyPreset('infra')">
+            <span class="pb-icon">🏗️</span>
+            <div class="pb-info">
+              <span class="pb-name">인프라 제안서</span>
+              <span class="pb-desc">사업개요 · 타당성분석 · 기술검토 · 재무모델 · 리스크 · 이행계획</span>
+            </div>
+          </button>
+          <button class="preset-btn" onclick="applyPreset('investment')">
+            <span class="pb-icon">💼</span>
+            <div class="pb-info">
+              <span class="pb-name">투자 제안서</span>
+              <span class="pb-desc">투자개요 · 시장기회 · 사업모델 · 재무전망 · 리스크 · 투자조건</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Start button -->
+      <button class="btn-primary" id="startBtn" onclick="startGeneration()">
+        ✨ 자동완성 시작
+      </button>
+
+    </aside>
+
+    <!-- ── Right Panel ── -->
+    <main class="right-panel">
+      <div class="toolbar">
+        <button class="toolbar-btn" id="copyAllBtn" onclick="copyAll()" disabled>📋 전체 복사</button>
+        <button class="toolbar-btn" id="exportWordBtn" onclick="exportWord()" disabled>📝 Word 내보내기</button>
+        <button class="toolbar-btn" id="exportPdfBtn" onclick="exportPdf()" disabled>🖨️ PDF 인쇄</button>
+        <div class="progress-badge" id="progressBadge" style="display:none">0 / 0 완료</div>
+      </div>
+
+      <div id="statusBar" class="status-bar hidden">
+        <div class="spinner" id="statusSpinner"></div>
+        <span id="statusText"></span>
+      </div>
+
+      <div class="cards-area" id="cardsArea">
+        <div class="empty-state">
+          <div class="es-icon">📋</div>
+          <div class="es-text">제안서를 자동으로 작성해드립니다</div>
+          <div class="es-sub">좌측에서 파일을 업로드하거나 프리셋을 선택 후<br>자동완성 시작 버튼을 누르세요</div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ─── PDF.js worker ─────────────────────────────────────────────────────────────
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ─── Constants ─────────────────────────────────────────────────────────────────
+const PRESETS = {
+  renewable: ['사업 개요', '시장 분석', '기술 사양', '재무 계획', '리스크 분석', '추진 일정', '팀 소개'],
+  infra:     ['사업 개요', '타당성 분석', '기술 검토', '재무 모델', '리스크 관리', '이행 계획', '팀 구성'],
+  investment:['투자 개요', '시장 기회', '사업 모델', '재무 전망', '리스크 분석', '투자 조건', '팀 소개'],
+};
+
+const COLOR_MAP = [
+  {keys:['개요','배경','목적','소개'],color:'#2563eb',bg:'#eff6ff'},
+  {keys:['시장','동향','현황','기회'],color:'#7c3aed',bg:'#f5f3ff'},
+  {keys:['재무','수익','비용','irr','npv','capex','전망','투자조건','투자 조건'],color:'#059669',bg:'#f0fdf4'},
+  {keys:['기술','사양','시스템','검토'],color:'#0284c7',bg:'#f0f9ff'},
+  {keys:['리스크','위험','관리'],color:'#dc2626',bg:'#fef2f2'},
+  {keys:['팀','인력','조직','구성'],color:'#d97706',bg:'#fffbeb'},
+  {keys:['일정','계획','이행','로드맵','타당'],color:'#db2777',bg:'#fdf4ff'},
+  {keys:['모델','사업 모델'],color:'#0891b2',bg:'#ecfeff'},
+];
+
+function getSectionStyle(title) {
+  const t = title.toLowerCase();
+  for (const {keys,color,bg} of COLOR_MAP) {
+    if (keys.some(k => t.includes(k))) return {color, bg};
+  }
+  return {color:'#64748b', bg:'#f8fafc'};
+}
+
+const SYSTEM_PROMPT = `당신은 DKC(디케이컨설턴츠)의 인프라 및 재생에너지 분야 제안서 작성 전문 컨설턴트입니다.
+
+[작성 원칙]
+1. 제공된 제안서 양식의 섹션 구조를 그대로 따릅니다
+2. 참고자료의 실제 수치와 데이터를 우선 활용합니다 (IRR, NPV, CAPEX, OPEX, 설비용량 MW/MWh, 시장규모, 성장률 등)
+3. 전문적이고 간결한 한국어로 작성하며, 핵심을 명확하게 기술합니다
+4. 참고자료에 없는 내용은 반드시 [추가 입력 필요: (구체적 항목)] 형식으로 표시합니다
+5. 각 섹션은 2~4개 단락으로 구성하며 불필요한 서론은 생략합니다
+6. 재무수치는 구체적인 숫자로 기재합니다
+
+[출력 형식] 반드시 아래 형식으로만 출력하세요:
+## (섹션명)
+(내용)
+
+---
+
+모든 섹션에 이 형식을 적용하고, 형식 외 부가 설명이나 메타텍스트는 출력하지 마세요.`;
+
+// ─── State ─────────────────────────────────────────────────────────────────────
+let apiKey = '';
+let formFile = null, formText = '';
+let refFiles = [], refTexts = [];
+let cards = []; // [{id, title, content, color, bg}]
+let isGenerating = false;
+let sortable = null;
+let activePreset = null;
+let streamBuffer = '';
+let currentCardId = null;
+let currentTitle = '';
+let currentContent = '';
+
+// ─── Init ──────────────────────────────────────────────────────────────────────
+(function init() {
+  apiKey = localStorage.getItem('dkc_api_key') || '';
+  updateApiStatus();
+  if (!apiKey) showApiKeyModal();
+
+  // Form PDF drop zone
+  setupDropzone('formDropzone', 'formFileInput', false, handleFormFile);
+  setupDropzone('refDropzone', 'refFileInput', true, handleRefFiles);
+
+  // Try restore last session
+  const saved = localStorage.getItem('dkc_last_cards');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length) {
+        cards = parsed;
+        renderAllCards();
+        enableToolbar();
+        setStatus(`📂 이전 작업 로드됨 (${cards.length}개 섹션) — 재생성하거나 수정하세요`, false);
+        setTimeout(() => clearStatus(), 5000);
+      }
+    } catch(e) { cards = []; }
+  }
+})();
+
+// ─── API Key ───────────────────────────────────────────────────────────────────
+function showApiKeyModal() {
+  document.getElementById('apiKeyInput').value = apiKey;
+  document.getElementById('apiModal').classList.remove('hidden');
+  document.getElementById('apiModalCancel').style.display = apiKey ? '' : 'none';
+}
+function saveApiKey() {
+  const val = document.getElementById('apiKeyInput').value.trim();
+  if (!val.startsWith('sk-')) { alert('올바른 API 키를 입력하세요 (sk- 로 시작)'); return; }
+  apiKey = val;
+  localStorage.setItem('dkc_api_key', apiKey);
+  document.getElementById('apiModal').classList.add('hidden');
+  updateApiStatus();
+}
+document.getElementById('apiModalCancel').onclick = () => document.getElementById('apiModal').classList.add('hidden');
+function updateApiStatus() {
+  const dot = document.getElementById('apiDot'), status = document.getElementById('apiStatus');
+  if (apiKey) { dot.classList.remove('off'); status.textContent = 'API 연결됨'; }
+  else { dot.classList.add('off'); status.textContent = 'API 키 설정 필요'; }
+}
+
+// ─── Drop zones ────────────────────────────────────────────────────────────────
+function setupDropzone(dzId, inputId, multiple, handler) {
+  const dz = document.getElementById(dzId);
+  const input = document.getElementById(inputId);
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag-over');
+    const files = [...e.dataTransfer.files].filter(f => f.type === 'application/pdf');
+    if (files.length) handler(multiple ? files : files[0]);
+  });
+  input.addEventListener('change', e => {
+    const files = [...e.target.files];
+    if (files.length) handler(multiple ? files : files[0]);
+    input.value = '';
+  });
+}
+
+function handleFormFile(file) {
+  formFile = file; formText = '';
+  const dz = document.getElementById('formDropzone');
+  dz.classList.add('has-file');
+  dz.querySelector('.dz-text').textContent = '✓ ' + file.name;
+  const fn = document.getElementById('formFileName');
+  document.getElementById('formFileNameText').textContent = file.name;
+  fn.style.display = 'flex';
+  activePreset = null;
+}
+function clearFormFile() {
+  formFile = null; formText = '';
+  const dz = document.getElementById('formDropzone');
+  dz.classList.remove('has-file');
+  dz.querySelector('.dz-text').textContent = '클릭 또는 드래그';
+  document.getElementById('formFileName').style.display = 'none';
+}
+function handleRefFiles(files) {
+  refFiles.push(...files);
+  renderRefList();
+}
+function removeRef(i) {
+  refFiles.splice(i, 1); refTexts.splice(i, 1);
+  renderRefList();
+}
+function renderRefList() {
+  const list = document.getElementById('refFileList');
+  list.innerHTML = refFiles.map((f,i) => `
+    <div class="file-item">
+      <span>📄</span>
+      <span class="fi-name">${f.name}</span>
+      <span class="fi-del" onclick="removeRef(${i})">✕</span>
+    </div>`).join('');
+}
+
+// ─── Presets ───────────────────────────────────────────────────────────────────
+function applyPreset(key) {
+  activePreset = key;
+  const sections = PRESETS[key];
+  const names   = {renewable:'재생에너지', infra:'인프라', investment:'투자'};
+  const fields  = {renewable:'재생에너지', infra:'인프라', investment:'기타'};
+  document.querySelector(`input[name=field][value="${fields[key]}"]`).checked = true;
+  setStatus(`✅ 프리셋 적용: ${names[key]} 제안서 (${sections.length}개 섹션)`, false);
+  setTimeout(() => clearStatus(), 3000);
+}
+
+// ─── PDF Extraction ────────────────────────────────────────────────────────────
+async function extractPdfText(file) {
+  const ab = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: ab}).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(it => it.str).join(' ') + '\n';
+  }
+  return text;
+}
+
+// ─── Generate ─────────────────────────────────────────────────────────────────
+async function startGeneration() {
+  if (!apiKey) { showApiKeyModal(); return; }
+  if (isGenerating) return;
+
+  const projectName = document.getElementById('projectName').value.trim();
+  const field = document.querySelector('input[name=field]:checked').value;
+
+  if (!formFile && !activePreset) {
+    alert('제안서 양식 PDF를 업로드하거나 프리셋을 선택해주세요.'); return;
+  }
+
+  isGenerating = true;
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('startBtn').textContent = '⏳ 생성 중...';
+  cards = [];
+  streamBuffer = '';
+  currentCardId = null;
+  currentTitle = '';
+  currentContent = '';
+
+  try {
+    // Extract PDFs
+    if (formFile && !formText) {
+      setStatus('📄 제안서 양식 분석 중...', true);
+      formText = await extractPdfText(formFile);
+    }
+    if (refFiles.length > refTexts.length) {
+      setStatus('📚 참고자료 추출 중...', true);
+      const newTexts = await Promise.all(refFiles.slice(refTexts.length).map(extractPdfText));
+      refTexts.push(...newTexts);
+    }
+
+    setStatus('🤖 GPT-4o 작성 중... (잠시 기다려주세요)', true);
+    showLoadingCards();
+
+    const sectionList = activePreset ? PRESETS[activePreset].map(s => `- ${s}`).join('\n') : '';
+    const userPrompt = buildUserPrompt(projectName, field, formText, refTexts, sectionList);
+
+    await streamGpt(userPrompt, processChunk);
+
+    // Finalize last section
+    if (currentTitle && currentContent.trim()) finalizeCard(currentTitle, currentContent.trim());
+
+    // Done
+    localStorage.setItem('dkc_last_cards', JSON.stringify(cards));
+    enableToolbar();
+    initSortable(); // enable drag after generation complete
+    setStatus(`✅ 완료: ${cards.length}개 섹션 작성됨`, false);
+    setTimeout(() => clearStatus(), 5000);
+    updateProgress();
+  } catch(err) {
+    setStatusError('❌ 오류: ' + (err.message || err));
+    console.error(err);
+  } finally {
+    isGenerating = false;
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('startBtn').textContent = '✨ 자동완성 시작';
+    // Remove skeleton cards if still there
+    document.querySelectorAll('.card-skeleton').forEach(el => el.remove());
+  }
+}
+
+function buildUserPrompt(projectName, field, formText, refTexts, sectionList) {
+  let prompt = `프로젝트명: ${projectName || '(미입력)'}
+분야: ${field}\n\n`;
+
+  if (formText) {
+    prompt += `[제안서 양식]\n${formText.slice(0, 8000)}\n\n`;
+  }
+  if (sectionList) {
+    prompt += `[작성할 섹션 목록]\n${sectionList}\n\n`;
+  }
+  const allRef = refTexts.join('\n\n──────\n\n').slice(0, 16000);
+  if (allRef) {
+    prompt += `[참고 자료]\n${allRef}\n\n`;
+  } else {
+    prompt += `[참고 자료: 없음 - 전문 지식 및 일반적 업계 데이터 기반으로 작성]\n\n`;
+  }
+  prompt += `위 내용을 바탕으로 제안서의 각 섹션을 순서대로 작성해주세요. 양식이 있는 경우 양식의 모든 항목을 포함하고, 프리셋 섹션 목록이 있는 경우 해당 항목들을 작성하세요.`;
+  return prompt;
+}
+
+// ─── GPT Streaming ─────────────────────────────────────────────────────────────
+async function streamGpt(userPrompt, onChunk, systemOverride) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      stream: true,
+      max_tokens: 4096,
+      messages: [
+        {role:'system', content: systemOverride || SYSTEM_PROMPT},
+        {role:'user',   content: userPrompt}
+      ]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream: true});
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') return;
+      try {
+        const parsed = JSON.parse(data);
+        const chunk = parsed.choices?.[0]?.delta?.content;
+        if (chunk) onChunk(chunk);
+      } catch(e) {}
+    }
+  }
+}
+
+// ─── Stream parsing ────────────────────────────────────────────────────────────
+function processChunk(chunk) {
+  streamBuffer += chunk;
+  const lines = streamBuffer.split('\n');
+  streamBuffer = lines.pop(); // keep incomplete line
+
+  for (const line of lines) {
+    if (line.startsWith('## ')) {
+      if (currentTitle && currentContent.trim()) finalizeCard(currentTitle, currentContent.trim());
+      currentTitle = line.replace(/^## /, '').trim();
+      currentContent = '';
+      currentCardId = 'card_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+      createStreamCard(currentCardId, currentTitle);
+    } else if (/^---+$/.test(line.trim())) {
+      if (currentTitle && currentContent.trim()) {
+        finalizeCard(currentTitle, currentContent.trim());
+        currentTitle = ''; currentContent = ''; currentCardId = null;
+      }
+    } else {
+      currentContent += line + '\n';
+      if (currentCardId) updateStreamCard(currentCardId, currentContent);
+    }
+  }
+}
+
+// ─── Card rendering ────────────────────────────────────────────────────────────
+function showLoadingCards() {
+  const area = document.getElementById('cardsArea');
+  area.innerHTML = '';
+  const count = activePreset ? PRESETS[activePreset].length : 4;
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    el.className = 'card card-skeleton';
+    el.innerHTML = `
+      <div class="card-header" style="gap:8px">
+        <div class="skeleton sk-line" style="width:120px;height:14px;margin:0"></div>
+      </div>
+      <div class="card-body">
+        <div class="skeleton sk-line"></div>
+        <div class="skeleton sk-line" style="width:88%"></div>
+        <div class="skeleton sk-line" style="width:75%"></div>
+        <div class="skeleton sk-line"></div>
+        <div class="skeleton sk-line"></div>
+      </div>`;
+    area.appendChild(el);
+  }
+}
+
+function createStreamCard(id, title) {
+  // Remove one skeleton
+  const sk = document.querySelector('.card-skeleton');
+  if (sk) sk.remove();
+
+  const {color, bg} = getSectionStyle(title);
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.id = id;
+  el.innerHTML = `
+    <div class="card-header">
+      <span class="drag-handle">⠿</span>
+      <div class="card-color-bar" style="background:${color}"></div>
+      <span class="card-title">${title}</span>
+      <div class="card-actions">
+        <button class="card-act-btn" title="복사" onclick="copyCard('${id}')">📋</button>
+        <button class="card-act-btn" title="재생성" onclick="regenCard('${id}')">🔄</button>
+      </div>
+    </div>
+    <div class="card-body" style="background:${bg}08">
+      <div class="card-content" id="content_${id}" contenteditable="false"><span class="skeleton sk-line" style="width:60%;display:block;height:12px"></span></div>
+    </div>`;
+  document.getElementById('cardsArea').appendChild(el);
+  cards.push({id, title, content:'', color, bg});
+  initSortable();
+  updateProgress();
+}
+
+function updateStreamCard(id, content) {
+  const el = document.getElementById('content_' + id);
+  if (!el) return;
+  el.textContent = content;
+  const card = cards.find(c => c.id === id);
+  if (card) card.content = content;
+}
+
+function finalizeCard(title, content) {
+  // Find or create
+  let card = cards.find(c => c.id === currentCardId);
+  if (!card) {
+    const {color, bg} = getSectionStyle(title);
+    currentCardId = 'card_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    cards.push({id: currentCardId, title, content, color, bg});
+    const sk = document.querySelector('.card-skeleton');
+    if (sk) sk.remove();
+    const el = buildCardEl({id: currentCardId, title, content, color, bg});
+    document.getElementById('cardsArea').appendChild(el);
+  } else {
+    card.content = content;
+    const el = document.getElementById('content_' + card.id);
+    if (el) {
+      el.innerHTML = formatContent(content);
+      el.contentEditable = 'true';
+    }
+  }
+  initSortable();
+  updateProgress();
+}
+
+function buildCardEl(card) {
+  const {id, title, content, color, bg} = card;
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.id = id;
+  el.innerHTML = `
+    <div class="card-header">
+      <span class="drag-handle">⠿</span>
+      <div class="card-color-bar" style="background:${color}"></div>
+      <span class="card-title">${escHtml(title)}</span>
+      <div class="card-actions">
+        <button class="card-act-btn" title="복사" onclick="copyCard('${id}')">📋</button>
+        <button class="card-act-btn" title="재생성" onclick="regenCard('${id}')">🔄</button>
+      </div>
+    </div>
+    <div class="card-body" style="background:${bg}22">
+      <div class="card-content" id="content_${id}" contenteditable="true">${formatContent(content)}</div>
+    </div>`;
+  return el;
+}
+
+function renderAllCards() {
+  const area = document.getElementById('cardsArea');
+  area.innerHTML = '';
+  cards.forEach(c => area.appendChild(buildCardEl(c)));
+  initSortable();
+  updateProgress();
+}
+
+function formatContent(text) {
+  return escHtml(text).replace(/\[추가 입력 필요:[^\]]+\]/g, m =>
+    `<span class="need-input">${m}</span>`);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Card actions ──────────────────────────────────────────────────────────────
+function copyCard(id) {
+  const card = cards.find(c => c.id === id);
+  if (!card) return;
+  navigator.clipboard.writeText(`${card.title}\n\n${card.content}`).then(() => {
+    // Use attribute selector to safely handle IDs with special chars
+    const btn = document.querySelector(`[id="${id}"] .card-act-btn`);
+    if (btn) { const orig = btn.textContent; btn.textContent = '✅'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500); }
+  });
+}
+
+async function regenCard(id) {
+  if (!apiKey) { showApiKeyModal(); return; }
+  const card = cards.find(c => c.id === id);
+  if (!card) return;
+
+  const contentEl = document.getElementById('content_' + id);
+  contentEl.innerHTML = '<span class="skeleton sk-line" style="width:70%;display:block;height:12px"></span>';
+  contentEl.contentEditable = 'false';
+
+  const projectName = document.getElementById('projectName').value.trim();
+  const field = document.querySelector('input[name=field]:checked').value;
+  const allRef = refTexts.join('\n\n──────\n\n').slice(0, 12000);
+
+  const regenSystem = `당신은 인프라 및 재생에너지 분야 제안서 작성 전문 컨설턴트입니다.
+요청한 섹션의 본문 내용만 출력하세요. 섹션 제목(##), 구분선(---), 부가 설명은 절대 출력하지 마세요.
+참고자료의 실제 수치를 활용하고, 없는 내용은 [추가 입력 필요: (항목)] 형식으로 표시하세요.`;
+
+  const prompt = `프로젝트명: ${projectName || '(미입력)'}
+분야: ${field}
+
+[참고자료]
+${allRef || '없음'}
+
+위 자료를 바탕으로 "${card.title}" 섹션을 새로 작성해주세요. 본문 내용만 출력하세요.`;
+
+  let newContent = '';
+  try {
+    setStatus(`🔄 "${card.title}" 재생성 중...`, true);
+    await streamGpt(prompt, chunk => {
+      newContent += chunk;
+      contentEl.textContent = newContent;
+    }, regenSystem);
+    card.content = newContent.trim();
+    contentEl.innerHTML = formatContent(newContent.trim());
+    localStorage.setItem('dkc_last_cards', JSON.stringify(cards));
+    setStatus(`✅ "${card.title}" 재생성 완료`, false);
+    setTimeout(() => clearStatus(), 3000);
+  } catch(err) {
+    setStatusError('재생성 오류: ' + err.message);
+  } finally {
+    contentEl.contentEditable = 'true';
+  }
+}
+
+// ─── Sortable ──────────────────────────────────────────────────────────────────
+function initSortable() {
+  if (isGenerating) return; // don't reinit while streaming
+  if (sortable) { sortable.destroy(); sortable = null; }
+  sortable = new Sortable(document.getElementById('cardsArea'), {
+    animation: 150,
+    handle: '.card-header',
+    ghostClass: 'card-ghost',
+    chosenClass: 'card-chosen',
+    onEnd: () => {
+      const ids = [...document.querySelectorAll('#cardsArea .card')].map(el => el.id);
+      cards.sort((a,b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+      localStorage.setItem('dkc_last_cards', JSON.stringify(cards));
+    }
+  });
+}
+
+// ─── Toolbar actions ───────────────────────────────────────────────────────────
+function copyAll() {
+  const text = cards.map(c => `${c.title}\n${'─'.repeat(30)}\n${c.content}`).join('\n\n\n');
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyAllBtn');
+    const orig = btn.textContent; btn.textContent = '✅ 복사됨!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  });
+}
+
+async function exportWord() {
+  if (!cards.length || typeof docx === 'undefined') return;
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = docx;
+  const projectName = document.getElementById('projectName').value.trim() || '제안서';
+  const children = [
+    new Paragraph({text: projectName, heading: HeadingLevel.HEADING_1, spacing:{after:400}}),
+  ];
+  for (const card of cards) {
+    children.push(new Paragraph({text: card.title, heading: HeadingLevel.HEADING_2, spacing:{before:400,after:160}}));
+    for (const line of card.content.split('\n')) {
+      if (line.trim()) children.push(new Paragraph({children:[new TextRun({text:line})], spacing:{after:80}}));
+    }
+    children.push(new Paragraph({text:'', spacing:{after:200}}));
+  }
+  const doc = new Document({sections:[{children}]});
+  const blob = await Packer.toBlob(doc);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url;
+  a.download = `${projectName}_제안서.docx`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportPdf() {
+  window.print();
+}
+
+// ─── UI helpers ────────────────────────────────────────────────────────────────
+function setStatus(msg, loading) {
+  const bar = document.getElementById('statusBar');
+  const txt = document.getElementById('statusText');
+  const sp  = document.getElementById('statusSpinner');
+  bar.className = 'status-bar';
+  bar.classList.remove('hidden');
+  txt.textContent = msg;
+  sp.style.display = loading ? 'block' : 'none';
+}
+function setStatusError(msg) {
+  const bar = document.getElementById('statusBar');
+  bar.className = 'status-bar error';
+  document.getElementById('statusText').textContent = msg;
+  document.getElementById('statusSpinner').style.display = 'none';
+}
+function clearStatus() { document.getElementById('statusBar').classList.add('hidden'); }
+
+function updateProgress() {
+  const filled = cards.filter(c => c.content.trim()).length;
+  const badge = document.getElementById('progressBadge');
+  badge.style.display = cards.length ? 'flex' : 'none';
+  badge.textContent = `${filled} / ${cards.length} 완료`;
+}
+
+function enableToolbar() {
+  ['copyAllBtn','exportWordBtn','exportPdfBtn'].forEach(id => {
+    document.getElementById(id).disabled = false;
+  });
+  document.getElementById('progressBadge').style.display = 'flex';
+}
+
+// Sync card content on edit
+document.getElementById('cardsArea').addEventListener('input', e => {
+  const contentEl = e.target.closest('.card-content');
+  if (!contentEl) return;
+  const id = contentEl.id.replace('content_','');
+  const card = cards.find(c => c.id === id);
+  if (card) { card.content = contentEl.innerText; localStorage.setItem('dkc_last_cards', JSON.stringify(cards)); }
+});
+</script>
+</body>
+</html>
